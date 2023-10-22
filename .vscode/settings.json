@@ -1,3 +1,3 @@
 {
-	"dotnet.defaultSolution": "JSONRPC.sln"
+  "dotnet.defaultSolution": "PowerServe.sln"
 }

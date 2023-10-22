@@ -1,37 +1,59 @@
 using System.IO.Pipes;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
+using System.Text;
 
-using StreamJsonRpc;
+using Microsoft.PowerShell.Commands;
 
 namespace PowerServe;
 
-public interface Target
+public class PowerShellTarget
 {
-  public IEnumerable<object> RunScript(string script);
-}
-
-public class PowerShellTarget : Target
-{
-  private readonly PowerShell ps;
-  public PowerShellTarget()
+  private readonly InitialSessionState initialSessionState = InitialSessionState.CreateDefault();
+  private readonly RunspacePool runspacePool;
+  public PowerShellTarget() : this(null) { }
+  public PowerShellTarget(int? maxRunspaces)
   {
-    RunspacePool runspacePool = RunspaceFactory.CreateRunspacePool();
+    runspacePool = RunspaceFactory.CreateRunspacePool(initialSessionState);
+    runspacePool.SetMaxRunspaces(maxRunspaces ?? Environment.ProcessorCount * 2);
     runspacePool.Open();
-    ps = PowerShell.Create();
-    ps.RunspacePool = runspacePool;
   }
 
-  public IEnumerable<object> RunScript(string script)
+  public string RunScriptJson(string script, int? depth = 5)
   {
-    Console.WriteLine($"Running script: {script}");
-    return ps.AddScript(script).Invoke<object>();
+    _ = Console.Error.WriteLineAsync($"Running script: {script}");
+    using PowerShell ps = PowerShell.Create();
+    ps.RunspacePool = runspacePool;
+    var result = ps.AddScript(script).Invoke();
+    Console.Error.WriteLine($"Script has returned {result.Count()} results");
+    if (ps.HadErrors)
+    {
+      foreach (var error in ps.Streams.Error)
+      {
+        Console.Error.WriteLine($"Error: {error}");
+      }
+    }
+
+    // This conversion logic is basically the same as ConvertTo-Json -Compress -Depth 5 -EnumsAsStrings
+    var context = new JsonObject.ConvertToJsonContext(5, true, true);
+
+    // Just return a string directly if that's what is emitted, for instance if the script has already JSONified its output.
+    if (result.Count() == 1 && result[0].BaseObject is string)
+    {
+      Console.Error.WriteLine($"Script returned a string: {result[0].BaseObject}, passing through after removing newlines");
+      return result[0].BaseObject.ToString().Replace("\r", "").Replace("\n", "");
+    }
+
+    object jsonToProcess = result.Count() == 1 ? result.First() : result;
+    string jsonResult = JsonObject.ConvertToJson(jsonToProcess, in context);
+    return jsonResult;
   }
 }
 
-public static class Server
+public class Server
 {
-  public static async Task StartAsync(string pipeName = "test")
+  private static readonly PowerShellTarget Target = new();
+  public static async Task StartAsync(string pipeName = "PowerServe")
   {
     NamedPipeServerStream serverStream = new(
       pipeName,
@@ -41,22 +63,32 @@ public static class Server
       PipeOptions.Asynchronous
     );
 
-    Console.WriteLine("Waiting connected");
+    _ = Console.Out.WriteLineAsync("Waiting for client connection...");
     await serverStream.WaitForConnectionAsync();
-    _ = OnClientConnectionAsync(serverStream, pipeName).ContinueWith(
-      _ => Console.WriteLine("Client Disconnected"),
-      TaskScheduler.Default
-    );
+    _ = OnClientConnectionAsync(serverStream, pipeName);
   }
+
 
   static async Task OnClientConnectionAsync(NamedPipeServerStream serverStream, string pipeName)
   {
-    Console.WriteLine("Client connected");
-    // Start the next named pipe listener
+    _ = Console.Out.WriteLineAsync("Client connected");
+    // Start the next named pipe listener. This is an eccentric behavior of named pipe servers vs. for instance tcp servers.
     _ = StartAsync(pipeName);
 
-    // Bind the connection to the JsonRpc Instance
-    JsonRpc clientSession = JsonRpc.Attach(serverStream, new PowerShellTarget());
-    await clientSession.Completion;
+    using StreamReader reader = new(serverStream);
+    using StreamWriter writer = new(serverStream);
+    string base64script = await reader.ReadLineAsync() ?? string.Empty;
+    string script = Encoding.UTF8.GetString(Convert.FromBase64String(base64script));
+    try
+    {
+      string jsonResult = Target.RunScriptJson(script, 5);
+      _ = Console.Out.WriteLineAsync($"Sending response: {jsonResult}");
+      await writer.WriteLineAsync(jsonResult);
+    }
+    catch (Exception ex)
+    {
+      await writer.WriteLineAsync("ERROR: " + ex.Message);
+    }
+
   }
 }

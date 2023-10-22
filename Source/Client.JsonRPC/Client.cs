@@ -1,6 +1,5 @@
 using System.IO.Pipes;
 using System.Management.Automation;
-
 using StreamJsonRpc;
 
 namespace PowerServe;
@@ -9,7 +8,7 @@ public class Client
 {
   private readonly string _pipeName;
 
-  public Client(string pipeName)
+  public Client(string pipeName = "powerserve")
   {
     _pipeName = pipeName;
   }
@@ -37,3 +36,4 @@ public class Client
     return await client.InvokeAsync<IEnumerable<T>>("RunScript", script);
   }
 }
+

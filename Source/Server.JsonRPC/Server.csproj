@@ -2,20 +2,16 @@
   <Target Name="Default"></Target>
   <PropertyGroup>
     <AssemblyName>PowerServe</AssemblyName>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <DebugType>portable</DebugType>
+    <PublishDir>../../Build/Server</PublishDir>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <GenerateDependencyFile>false</GenerateDependencyFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.PowerShell.Commands.Utility" Version="7.2.0" />
-    <PackageReference Include="System.Management.Automation" Version="7.2.0" />
+    <PackageReference Include="PowerShellStandard.Library" Version="5.1.1" PrivateAssets="All" />
+    <PackageReference Include="streamjsonrpc" Version="2.14.24" />
   </ItemGroup>
-
-  <Target Name="CopyToBuildFolder" AfterTargets="Publish">
-    <Copy SourceFiles="$(OutputPath)\publish\PowerServe.dll" DestinationFolder="../../Build" />
-  </Target>
 </Project>
