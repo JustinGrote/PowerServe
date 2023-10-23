@@ -1,63 +1,31 @@
-using System.IO.Pipes;
-using System.Text;
-using System.Diagnostics;
+using CommandLine;
 
-if (args.Length == 0)
+using System.Diagnostics.CodeAnalysis;
+using PowerServe;
+
+/// <summary>
+/// Defines the available command line options for the PowerServeClient.
+/// </summary>
+public class CliOptions
 {
-  Console.Error.WriteLine("Please provide a script as a quoted argument.");
-  return;
+  [Value(0, Required = true, MetaName = "Script", HelpText = "The PowerShell script to execute.")]
+  public string Script { get; set; } = string.Empty;
+
+  [Option('p', "pipe-name", Required = false, HelpText = "The name of the named pipe to use.")]
+  public string PipeName { get; set; } = $"PowerServe-{Environment.UserName}";
+
+  [Option('v', "verbose", Required = false, HelpText = "Log verbose messages about what PowerServeClient is doing to stderr. This may interfere with the JSON response so only use for troubleshooting.")]
+  public bool Debug { get; set; }
 }
-string script = args[0];
 
-string pipeName = "PowerServe-" + Environment.UserName; //TODO: Make this an argument parameter
-using var pipeClient = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
-
-try
+// We cant use top-level main because for .NET 8 AOT we need this additional attribute to make CommandLineParser work with AOT
+static class Program
 {
-  pipeClient.Connect(500);
-}
-catch (TimeoutException)
-{
-  Console.Error.WriteLine($"PowerServe is not running. Spawning new pwsh.exe process to listen on named pipe {pipeName}...");
-  string exeDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
-  Console.Error.WriteLine($"Current dir: {exeDir}");
-  ProcessStartInfo startInfo = new()
+  [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CliOptions))]
+  static async Task Main(string[] args)
   {
-    FileName = "pwsh.exe",
-    CreateNoWindow = true,
-    UseShellExecute = false,
-    // WindowStyle = ProcessWindowStyle.Hidden,
-    WorkingDirectory = exeDir,
-    ArgumentList = {
-      "-NoProfile",
-      "-NoExit",
-      "-NonInteractive",
-      "-Command", $"Import-Module $pwd/PowerServe.dll;Start-PowerServe -PipeName {pipeName}" }
-  };
-  Process process = new()
-  {
-    StartInfo = startInfo
-  };
-  process.Start();
-  // Shouldn't take more than 3000 seconds to start up
-  pipeClient.Connect(3000);
+    // Program entrypoint
+    await Parser.Default.ParseArguments<CliOptions>(args)
+      .WithParsedAsync(options => Client.InvokeScript(options.Script, options.PipeName, options.Debug));
+  }
 }
-
-// We use base64 encoding to avoid issues with newlines in the script.
-byte[] scriptBytes = Encoding.UTF8.GetBytes(script);
-string base64Script = Convert.ToBase64String(scriptBytes);
-
-var streamWriter = new StreamWriter(pipeClient);
-await streamWriter.WriteLineAsync(base64Script);
-await streamWriter.FlushAsync();
-
-var streamReader = new StreamReader(pipeClient);
-string? jsonResponse = await streamReader.ReadLineAsync();
-
-if (jsonResponse == null)
-{
-  Console.Error.WriteLine("No response received.");
-  Environment.Exit(2);
-}
-
-Console.WriteLine(jsonResponse);
