@@ -1,0 +1,48 @@
+name: Build and Publish
+
+on:
+  push:
+    branches:
+      - main
+      - ci
+  pull_request:
+    branches:
+      - main
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Cache .NET dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.nuget/packages
+          **/bin/**
+          **/obj/**
+        key: dotnet-${{ hashFiles('**/*.csproj') }}
+        restore-keys: dotnet-
+
+    - name: Setup .NET Preview
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 'rc'
+
+    - name: Build
+      run: dotnet publish -c Release -r win-x64
+
+    - name: Publish Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: PowerServeClient
+        path: Build/

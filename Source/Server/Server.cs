@@ -90,6 +90,5 @@ public class Server
     {
       await writer.WriteLineAsync("ERROR: " + ex.Message);
     }
-
   }
 }
