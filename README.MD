@@ -6,10 +6,12 @@ Run pwsh scripts repeatedly in a high performance manner and get JSONified resul
 
 Download the release and extract into a folder.
 
-`PowerClient.exe "MyScript"`
+`PowerServeClient.exe "MyScript"`
 
 Note: This will spawn a background pwsh.exe process. To end that process when finished, use the following command:
 `get-process pwsh | where commandline -match 'Start-PowerServe' | stop-process`
+
+To see more options, run `PowerServeClient.exe --help`
 
 However it is purposefully meant to be persistent to "cache" the startup and runspace pools for better efficiency, so you would generally only do this for troubleshooting and testing.
 
@@ -39,4 +41,9 @@ Replacing USERNAME with your current username. If you do this then you will be a
 
 * Controlling number of threads
 * "Script Affinity" which will attempt to re-run the same script in the same runspace and minimize memory usage and startup time
-* More command line options to control behavior
+
+## Limitations / Known Issues
+
+* Only error and output streams are considered, warning/progress/verbose/debug output is discarded
+* Sometimes gets frozen on serialization due to a large default depth size, be sure to be very narrow in the objects you return. `PSCustomObject and Select-Object are your friends`.
+* Environment variables are currently not passed through from the PowerServeClient.exe call to the backend pwsh process, it is recommended instead you provide the environment variables as parameters to your script.
