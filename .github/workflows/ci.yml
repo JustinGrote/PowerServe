@@ -23,20 +23,11 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Cache .NET dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.nuget/packages
-          **/bin/**
-          **/obj/**
-        key: dotnet-${{ hashFiles('**/*.csproj') }}
-        restore-keys: dotnet-
-
     - name: Setup .NET Preview
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 'rc'
+        global-json-file: global.json
+        cache: true
 
     - name: Build
       run: dotnet publish -c Release -r win-x64
