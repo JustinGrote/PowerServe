@@ -5,7 +5,7 @@ using System.Diagnostics;
 namespace PowerServe;
 class Client
 {
-  public static async Task InvokeScript(string script, string pipeName, bool debug)
+  public static async Task InvokeScript(string script, string? workingDirectory, string pipeName, bool debug)
   {
     using var pipeClient = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
 
@@ -17,20 +17,20 @@ class Client
     {
       if (debug) Console.Error.WriteLine($"PowerServe is not running on pipe {pipeName}. Spawning new pwsh.exe PowerServe listener...");
 
-      string? exeDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+      string exeDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? Environment.CurrentDirectory;
       ProcessStartInfo startInfo = new()
       {
-        FileName = "pwsh.exe",
+        FileName = "pwsh",
         CreateNoWindow = true,
         UseShellExecute = false,
         WindowStyle = ProcessWindowStyle.Hidden,
-        WorkingDirectory = exeDir,
+        WorkingDirectory = workingDirectory ?? exeDir,
         ArgumentList =
         {
           "-NoProfile",
           "-NoExit",
           "-NonInteractive",
-          "-Command", $"Import-Module $pwd/PowerServe.dll;Start-PowerServe -PipeName {pipeName}"
+          "-Command", $"Import-Module $(Join-Path '{exeDir}' 'PowerServe.dll');Start-PowerServe -PipeName {pipeName}"
         }
       };
       Process process = new()

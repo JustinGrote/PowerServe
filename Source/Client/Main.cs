@@ -11,7 +11,10 @@ public class CliOptions
   [Value(0, Required = true, MetaName = "Script", HelpText = "The PowerShell script to execute.")]
   public string Script { get; set; } = string.Empty;
 
-  [Option('p', "pipe-name", Required = false, HelpText = "The name of the named pipe to use.")]
+  [Option('w', "WorkingDirectory", Required = false, HelpText = "Specify the working directory for the PowerShell process. Defaults to the current directory.")]
+  public string? WorkingDirectory { get; set; }
+
+  [Option('p', "pipe-name", Required = false, HelpText = "The named pipe to use. The server will start here if not already running. Defaults to PowerServe-{username}.")]
   public string PipeName { get; set; } = $"PowerServe-{Environment.UserName}";
 
   [Option('v', "verbose", Required = false, HelpText = "Log verbose messages about what PowerServeClient is doing to stderr. This may interfere with the JSON response so only use for troubleshooting.")]
@@ -26,6 +29,6 @@ static class Program
   {
     // Program entrypoint
     await Parser.Default.ParseArguments<CliOptions>(args)
-      .WithParsedAsync(options => Client.InvokeScript(options.Script, options.PipeName, options.Debug));
+      .WithParsedAsync(options => Client.InvokeScript(options.Script, options.WorkingDirectory, options.PipeName, options.Debug));
   }
 }
