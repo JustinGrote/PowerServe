@@ -26,11 +26,13 @@ public class PowerShellTarget
     ps.RunspacePool = runspacePool;
     var result = ps.AddScript(script).Invoke();
     Console.Error.WriteLine($"Script has returned {result.Count()} results");
+    string errorMessage = string.Empty;
     if (ps.HadErrors)
     {
       foreach (var error in ps.Streams.Error)
       {
         Console.Error.WriteLine($"Error: {error}");
+        errorMessage += $"Error: {error}; ";
       }
     }
 
@@ -41,12 +43,12 @@ public class PowerShellTarget
     if (result.Count() == 1 && result[0].BaseObject is string)
     {
       Console.Error.WriteLine($"Script returned a string: {result[0].BaseObject}, passing through after removing newlines");
-      return result[0].BaseObject.ToString().Replace("\r", "").Replace("\n", "");
+      return result[0].BaseObject.ToString()?.Replace("\r", "").Replace("\n", "") ?? string.Empty;
     }
 
     object jsonToProcess = result.Count() == 1 ? result.First() : result;
     string jsonResult = JsonObject.ConvertToJson(jsonToProcess, in context);
-    return jsonResult;
+    return errorMessage + jsonResult;
   }
 }
 
@@ -67,7 +69,6 @@ public class Server
     await serverStream.WaitForConnectionAsync();
     _ = OnClientConnectionAsync(serverStream, pipeName);
   }
-
 
   static async Task OnClientConnectionAsync(NamedPipeServerStream serverStream, string pipeName)
   {
