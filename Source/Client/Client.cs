@@ -3,7 +3,7 @@ using System.Text;
 using System.Diagnostics;
 
 namespace PowerServe;
-class Client
+static class Client
 {
   public static async Task InvokeScript(string script, string? workingDirectory, string pipeName, bool debug)
   {

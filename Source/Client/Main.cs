@@ -1,15 +1,17 @@
 using CommandLine;
-
+using static PowerServe.Client;
 using System.Diagnostics.CodeAnalysis;
-using PowerServe;
 
 /// <summary>
 /// Defines the available command line options for the PowerServeClient.
 /// </summary>
 public class CliOptions
 {
-  [Value(0, Required = true, MetaName = "Script", HelpText = "The PowerShell script to execute.")]
+  [Option('c', "Script", SetName = "Script", Required = true, HelpText = "The PowerShell script to execute.")]
   public string Script { get; set; } = string.Empty;
+
+  [Option('f', "File", SetName = "File", Required = true, HelpText = "The path to the PowerShell script file to execute.")]
+  public string File { get; set; } = string.Empty;
 
   [Option('w', "WorkingDirectory", Required = false, HelpText = "Specify the working directory for the PowerShell process. Defaults to the current directory.")]
   public string? WorkingDirectory { get; set; }
@@ -21,14 +23,19 @@ public class CliOptions
   public bool Debug { get; set; }
 }
 
-// We cant use top-level main because for .NET 8 AOT we need this additional attribute to make CommandLineParser work with AOT
+
 static class Program
 {
+  // We cant use top-level main because for .NET 8 AOT we need this additional attribute to make CommandLineParser work with AOT
   [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CliOptions))]
   static async Task Main(string[] args)
   {
     // Program entrypoint
     await Parser.Default.ParseArguments<CliOptions>(args)
-      .WithParsedAsync(options => Client.InvokeScript(options.Script, options.WorkingDirectory, options.PipeName, options.Debug));
+      .WithParsedAsync(options =>
+      {
+        string script = options.File != string.Empty ? $"& (Resolve-Path {options.File})" : options.Script;
+        return InvokeScript(script, options.WorkingDirectory, options.PipeName, options.Debug);
+      });
   }
 }
