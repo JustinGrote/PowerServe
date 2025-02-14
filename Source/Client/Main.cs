@@ -1,41 +1,50 @@
-using CommandLine;
+using System.CommandLine;
+using System.CommandLine.Invocation;
+using System.Diagnostics; // added for Trace and ConsoleTraceListener
+
 using static PowerServe.Client;
-using System.Diagnostics.CodeAnalysis;
 
-/// <summary>
-/// Defines the available command line options for the PowerServeClient.
-/// </summary>
-public class CliOptions
+// Write Trace to stderr
+using ConsoleTraceListener consoleTracer = new(useErrorStream: true)
 {
-  [Option('c', "Script", SetName = "Script", Required = true, HelpText = "The PowerShell script to execute.")]
-  public string Script { get; set; } = string.Empty;
+  Name = "mainConsoleTracer"
+};
 
-  [Option('f', "File", SetName = "File", Required = true, HelpText = "The path to the PowerShell script file to execute.")]
-  public string File { get; set; } = string.Empty;
+consoleTracer.WriteLine($"{DateTime.Now} [{consoleTracer.Name}] - Starting output to trace listener.");
+Trace.Listeners.Add(consoleTracer);
 
-  [Option('w', "WorkingDirectory", Required = false, HelpText = "Specify the working directory for the PowerShell process. Defaults to the current directory.")]
-  public string? WorkingDirectory { get; set; }
-
-  [Option('p', "pipe-name", Required = false, HelpText = "The named pipe to use. The server will start here if not already running. Defaults to PowerServe-{username}.")]
-  public string PipeName { get; set; } = $"PowerServe-{Environment.UserName}";
-
-  [Option('v', "verbose", Required = false, HelpText = "Log verbose messages about what PowerServeClient is doing to stderr. This may interfere with the JSON response so only use for troubleshooting.")]
-  public bool Debug { get; set; }
-}
-
-
-static class Program
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (sender, eventArgs) =>
 {
-  // We cant use top-level main because for .NET 8 AOT we need this additional attribute to make CommandLineParser work with AOT
-  [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CliOptions))]
-  static async Task Main(string[] args)
-  {
-    // Program entrypoint
-    await Parser.Default.ParseArguments<CliOptions>(args)
-      .WithParsedAsync(options =>
-      {
-        string script = options.File != string.Empty ? $"& (Resolve-Path {options.File})" : options.Script;
-        return InvokeScript(script, options.WorkingDirectory, options.PipeName, options.Debug);
-      });
-  }
-}
+  eventArgs.Cancel = true;
+  cts.Cancel();
+};
+
+var rootCommand = new RootCommand
+{
+  new Option<string>(["--script", "-c"], "The PowerShell script to execute."),
+  new Option<string>(["--file", "-f"], "The path to the PowerShell script file to execute."),
+  new Option<string>(["--working-directory", "-w"], () => Directory.GetCurrentDirectory(), "Specify the working directory for the PowerShell process. Defaults to the current directory."),
+  new Option<string>(["--pipe-name", "-p"], () => $"PowerServe-{Environment.UserName}", "The named pipe to use. The server will start here if not already running. Defaults to PowerServe-{username}."),
+  new Option<bool>(["--verbose", "-v"], "Log verbose messages about what PowerServeClient is doing to stderr. This may interfere with the JSON response so only use for troubleshooting."),
+  new Option<string>(["--exeDir", "-e"], "Where to locate the PowerServe module.") {IsHidden = true}
+};
+
+rootCommand.Handler = CommandHandler.Create<string, string, string, string, bool, string>((script, file, workingDirectory, pipeName, verbose, exeDir) =>
+{
+  string resolvedScript = !string.IsNullOrEmpty(file) ? $"& (Resolve-Path {file})" : script;
+  return InvokeScript(
+    script: resolvedScript,
+    pipeName,
+    workingDirectory,
+    verbose,
+    cts.Token,
+    exeDir
+  );
+});
+
+await rootCommand.InvokeAsync(args);
+
+// Write final trace output and clean up the trace listener.
+consoleTracer.WriteLine($"{DateTime.Now} [{consoleTracer.Name}] - Ending output to trace listener.");
+Trace.Flush();

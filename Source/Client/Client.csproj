@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>PowerServeClient</AssemblyName>
     <Authors>Justin Grote</Authors>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -17,9 +17,7 @@
     <GenerateDependencyFile>false</GenerateDependencyFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="CommandLineParser" Version="2.9.1" />
-    <PackageReference Include="System.Management.Automation" Version="7.2.0" PrivateAssets="All" />
-    <PackageReference Include="System.Text.Json" Version="7.0.3" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20071.2" />
   </ItemGroup>
 
   <Target Name="CopyToBuildFolder" AfterTargets="Publish">

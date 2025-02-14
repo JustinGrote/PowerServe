@@ -25,6 +25,19 @@
       "createTemporaryIntegratedConsole": true,
       "attachDotnetDebugger": true,
       "preLaunchTask": "Watch-Publish"
+    },
+    {
+      "name": "Run PowerClient Hello World",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/bin/Debug/<target-framework>/<project-name.dll>",
+      "args": [
+
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "internalConsole"
     }
 	]
 }
