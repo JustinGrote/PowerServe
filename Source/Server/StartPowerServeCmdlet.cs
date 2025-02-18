@@ -9,5 +9,5 @@ public class StartPowerServeCmdlet : PSCmdlet
   public string PipeName { get; set; } = "PowerServe-" + Environment.UserName;
 
   // Runs in the background for the life of the module
-  protected override void ProcessRecord() => _ = Server.StartAsync(PipeName!);
+  protected override void ProcessRecord() => _ = new Server().StartAsync(PipeName!);
 }

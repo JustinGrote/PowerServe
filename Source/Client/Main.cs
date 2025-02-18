@@ -27,10 +27,11 @@ var rootCommand = new RootCommand
   new Option<string>(["--working-directory", "-w"], () => Directory.GetCurrentDirectory(), "Specify the working directory for the PowerShell process. Defaults to the current directory."),
   new Option<string>(["--pipe-name", "-p"], () => $"PowerServe-{Environment.UserName}", "The named pipe to use. The server will start here if not already running. Defaults to PowerServe-{username}."),
   new Option<bool>(["--verbose", "-v"], "Log verbose messages about what PowerServeClient is doing to stderr. This may interfere with the JSON response so only use for troubleshooting."),
+  new Option<int>(["--depth", "-d"], () => 5, "The maximum depth for JSON serialization of PowerShell objects."),
   new Option<string>(["--exeDir", "-e"], "Where to locate the PowerServe module.") {IsHidden = true}
 };
 
-rootCommand.Handler = CommandHandler.Create<string, string, string, string, bool, string>((script, file, workingDirectory, pipeName, verbose, exeDir) =>
+rootCommand.Handler = CommandHandler.Create<string, string, string, string, bool, int, string>((script, file, workingDirectory, pipeName, verbose, depth, exeDir) =>
 {
   string resolvedScript = !string.IsNullOrEmpty(file) ? $"& (Resolve-Path {file})" : script;
   return InvokeScript(
@@ -39,7 +40,8 @@ rootCommand.Handler = CommandHandler.Create<string, string, string, string, bool
     workingDirectory,
     verbose,
     cts.Token,
-    exeDir
+    exeDir,
+    depth
   );
 });
 

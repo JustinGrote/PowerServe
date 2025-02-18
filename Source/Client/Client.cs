@@ -8,7 +8,7 @@ static class Client
   /// <summary>
   /// An invocation of the client. We connect, send the script, and receive the response in JSONLines format.
   /// </summary>
-  public static async Task InvokeScript(string script, string pipeName, string? workingDirectory, bool debug, CancellationToken cancellationToken, string? exeDir)
+  public static async Task InvokeScript(string script, string pipeName, string? workingDirectory, bool debug, CancellationToken cancellationToken, string? exeDir, int depth)
   {
     using var pipeClient = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
 
@@ -65,30 +65,42 @@ static class Client
     byte[] scriptBytes = Encoding.UTF8.GetBytes(script);
     string base64Script = Convert.ToBase64String(scriptBytes);
 
-    var streamWriter = new StreamWriter(pipeClient);
-    var streamReader = new StreamReader(pipeClient);
+    var streamWriter = new TracedStreamWriter(pipeClient);
+    var streamReader = new TracedStreamReader(pipeClient);
 
     // Register a callback to send <<CANCEL>> when cancellation is requested
-    cancellationToken.Register(async () =>
+    cancellationToken.Register(() =>
     {
       Trace.TraceWarning("Cancellation requested. Sending <<CANCEL>> to server.");
-      await streamWriter.WriteLineAsync("<<CANCEL>>");
-      await streamWriter.FlushAsync();
+      streamWriter.WriteLine("<<CANCEL>>");
+      streamWriter.Flush();
     });
 
+    if (depth > 0)
+    {
+      Trace.TraceInformation($"Depth specified as {depth}. Appending to script.");
+      base64Script = $"{base64Script} {depth}";
+    }
     Trace.TraceInformation($"Base64 Encoded Script: {base64Script}");
+
     await streamWriter.WriteLineAsync(base64Script);
     await streamWriter.FlushAsync();
 
-    string? jsonResponse = await streamReader.ReadLineAsync();
-    Trace.TraceInformation($"Received JSON response: {jsonResponse}");
-
-    if (jsonResponse == null)
+    string? jsonResponse;
+    while ((jsonResponse = await streamReader.ReadLineAsync()) != null)
     {
-      Console.Error.WriteLine("No response received.");
-      Environment.Exit(2);
+      if (jsonResponse == "<<END>>")
+      {
+        Trace.TraceInformation("Received <<END>>. Terminating normally.");
+        break;
+      }
+
+      Trace.TraceInformation($"Received JSON response: {jsonResponse}");
     }
 
-    Console.WriteLine(jsonResponse);
+    if (jsonResponse != "<<END>>")
+    {
+      throw new InvalidOperationException("Connection closed unexpectedly before receiving <<END>>.");
+    }
   }
 }
