@@ -5,13 +5,6 @@ using System.Diagnostics; // added for Trace and ConsoleTraceListener
 using static PowerServe.Client;
 
 // Write Trace to stderr
-using ConsoleTraceListener consoleTracer = new(useErrorStream: true)
-{
-  Name = "mainConsoleTracer"
-};
-
-consoleTracer.WriteLine($"{DateTime.Now} [{consoleTracer.Name}] - Starting output to trace listener.");
-Trace.Listeners.Add(consoleTracer);
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (sender, eventArgs) =>
@@ -47,6 +40,4 @@ rootCommand.Handler = CommandHandler.Create<string, string, string, string, bool
 
 await rootCommand.InvokeAsync(args);
 
-// Write final trace output and clean up the trace listener.
-consoleTracer.WriteLine($"{DateTime.Now} [{consoleTracer.Name}] - Ending output to trace listener.");
 Trace.Flush();

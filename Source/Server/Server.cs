@@ -30,13 +30,26 @@ public class PowerShellTarget
 
     using PSDataCollection<PSObject> outputCollection = new() { BlockingEnumerator = true };
 
+    cancellationToken.Register(() =>
+    {
+      _ = Console.Error.WriteLineAsync($"Cancellation requested. Stopping script: {script}");
+      // This generates a PipelineStoppedException that must be handled
+      ps.Stop();
+      _ = Console.Error.WriteLineAsync($"Script Stopped");
+    });
+
+    if (cancellationToken.IsCancellationRequested)
+    {
+      _ = Console.Error.WriteLineAsync($"Cancellation requested. Stopping script: {script}");
+      return;
+    }
     var invokeTask = ps
       .AddScript(script)
       .InvokeAsync<PSObject, PSObject>(null, outputCollection);
 
     JsonObject.ConvertToJsonContext context = new(depth, true, true);
 
-    // Since the collection is blocking, this should stream appropriately until completed
+    // Since the collection is blocking, this should stream appropriately and in order until completed
     Task outputTask = Task.Run(async () =>
     {
       foreach (var item in outputCollection)
@@ -48,18 +61,10 @@ public class PowerShellTarget
       }
     });
 
-    try
-    {
-      _ = await invokeTask;
-      // PowerShell doesn't auto-close the collection, we must do it manually. This will unblock the outputTask after it finishes all the items in the collection.
-      outputCollection.Complete();
-      await outputTask;
-    }
-    catch (Exception ex)
-    {
-      _ = Console.Error.WriteLineAsync($"Error running script: {ex}");
-      await writer.WriteLineAsync($"SERVER ERROR: {ex}");
-    }
+    _ = await invokeTask;
+    // PowerShell doesn't auto-close the collection, we must do it manually. This will unblock the outputTask after it finishes all the items in the collection.
+    outputCollection.Complete();
+    await outputTask;
   }
 }
 
@@ -157,28 +162,36 @@ public class Server
     var parts = inFromClient.Split(' ', 2);
     int depth = 5; // default depth value
     string encodedScript = parts.Length == 2 && int.TryParse(parts[1], out depth) ? parts[0] : inFromClient;
-
     string script = Encoding.UTF8.GetString(Convert.FromBase64String(encodedScript));
 
+    using CancellationTokenSource runScriptCts = new();
     try
     {
-      using CancellationTokenSource runScriptCts = new();
-      // using Task readTask = Task.Run(async () =>
-      // {
-      //   Console.Error.WriteLine("Waiting for Cancellation.");
-      //   // This should block until a new line is received.
-      //   if (reader.ReadLine() == "<<CANCEL>>")
-      //   {
-      //     Console.Error.WriteLine("Cancel message received by client. Cancelling script.");
-      //     runScriptCts.Cancel();
-      //   }
-      //   else
-      //   {
-      //     Console.Error.WriteLine("No cancel message received. Continuing script.");
-      //   }
-      // });
 
+      Task cancellationReadTask = Task.Run(() =>
+      {
+        Console.Error.WriteLine("Waiting for Cancellation.");
+        // This should block on the client until a new line is received or the stream is closed.
+        if (reader.ReadLine() == "<<CANCEL>>")
+        {
+          Console.Error.WriteLine("Cancel message received by client. Cancelling script.");
+          runScriptCts.Cancel();
+        }
+        else
+        {
+          Console.Error.WriteLine("No cancel message received. Continuing script.");
+        }
+      });
       await Target.RunScriptJsonAsync(script, writer, runScriptCts.Token, depth);
+    }
+    catch (PipelineStoppedException)
+    {
+      if (!runScriptCts.IsCancellationRequested)
+      {
+        Console.Error.WriteLine($"SERVER ERROR: Script unexpectedly stopped");
+      }
+      Console.Error.WriteLine($"Script Succssfully Cancelled");
+      await writer.WriteLineAsync("<<CANCELLED>>");
     }
     catch (Exception ex)
     {

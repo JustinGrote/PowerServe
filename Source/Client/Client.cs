@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace PowerServe;
 static class Client
@@ -8,13 +9,26 @@ static class Client
   /// <summary>
   /// An invocation of the client. We connect, send the script, and receive the response in JSONLines format.
   /// </summary>
-  public static async Task InvokeScript(string script, string pipeName, string? workingDirectory, bool debug, CancellationToken cancellationToken, string? exeDir, int depth)
+  public static async Task InvokeScript(string script, string pipeName, string? workingDirectory, bool verbose, CancellationToken cancellationToken, string? exeDir, int depth)
   {
-    using var pipeClient = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
+    if (verbose)
+    {
+      // Log all tracing to stderr.
+      Trace.Listeners.Add(new ConsoleTraceListener(useErrorStream: true));
+    }
+
+    using var pipeClient = new NamedPipeClientStream(
+      ".",
+      pipeName,
+      PipeDirection.InOut,
+      PipeOptions.Asynchronous
+    );
 
     try
     {
       pipeClient.Connect(500);
+      GetNamedPipeServerProcessId(pipeClient.SafePipeHandle.DangerousGetHandle(), out int serverProcessId);
+      Trace.TraceInformation($"Connected to PowerServe (PID: {serverProcessId}) on Pipe {pipeName}.");
     }
     catch (TimeoutException)
     {
@@ -95,7 +109,13 @@ static class Client
         break;
       }
 
-      Trace.TraceInformation($"Received JSON response: {jsonResponse}");
+      if (jsonResponse == "<<CANCELLED>>")
+      {
+        Trace.TraceInformation("Script Cancelled Successfully.");
+        continue;
+      }
+
+      Console.WriteLine(jsonResponse);
     }
 
     if (jsonResponse != "<<END>>")
@@ -103,4 +123,7 @@ static class Client
       throw new InvalidOperationException("Connection closed unexpectedly before receiving <<END>>.");
     }
   }
+
+  [DllImport("kernel32.dll", SetLastError = true)]
+  public static extern bool GetNamedPipeServerProcessId(IntPtr hPipe, out int ClientProcessId);
 }
