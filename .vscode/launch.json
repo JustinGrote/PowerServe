@@ -5,35 +5,23 @@
 	"version": "0.2.0",
 	"configurations": [
     {
-      "name": ".NET Core Attach",
-      "type": "coreclr",
-      "request": "attach",
-      "requireExactSource": false
-    },
-    {
-      "name": "PS: Binary Interactive",
-      "request": "launch",
-      "type": "PowerShell",
-      "attachDotnetDebugger": true,
-      "createTemporaryIntegratedConsole": true
-    },
-    {
-      "name": "Run Tests",
+      "name": "PowerServe: Server",
       "type": "PowerShell",
       "request": "launch",
-      "script": "Invoke-Pester -Output Detailed",
+      "script": "Import-Module ./Source/Server/bin/Debug/net8.0/PowerServe.dll;Start-PowerServe;sleep 300",
       "createTemporaryIntegratedConsole": true,
       "attachDotnetDebugger": true,
-      "preLaunchTask": "Watch-Publish"
+      "preLaunchTask": "dotnet: build",
     },
     {
       "name": "Run PowerClient Hello World",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/<target-framework>/<project-name.dll>",
+      "preLaunchTask": "dotnet: build",
+      "program": "${workspaceFolder}/Source/Client/bin/Debug/net9.0/PowerServeClient.dll",
       "args": [
-
+        "-c",
+        "'Hello World'"
       ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
