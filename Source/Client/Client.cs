@@ -1,6 +1,8 @@
-using System.IO.Pipes;
 using System.Diagnostics;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
+
+using PowerServe.Shared;
 
 namespace PowerServe;
 static class Client

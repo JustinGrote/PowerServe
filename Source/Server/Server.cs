@@ -4,6 +4,8 @@ using System.Management.Automation.Runspaces;
 
 using Microsoft.PowerShell.Commands;
 
+using PowerServe.Shared;
+
 namespace PowerServe;
 
 public class PowerShellTarget

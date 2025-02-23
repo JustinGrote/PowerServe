@@ -20,7 +20,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20071.2" />
-    <Compile Include="..\Shared\StreamString.cs" />
+    <Compile Include="../Shared/StreamString.cs" />
   </ItemGroup>
 
   <Target Name="CopyToBuildFolder" AfterTargets="Publish">

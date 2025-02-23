@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Text;
 
+namespace PowerServe.Shared;
+
 /// <summary>
 /// Provides methods for efficiently reading and writing strings to a stream with a length prefix.
 /// This has the advantage of being able to use any character in the string since no delimiter is required, whereas typical methods like StringWriter.WriteLine() use newline as a delimiter and so your content cannot contain a newline.
@@ -78,13 +80,13 @@ public class StreamString(Stream stream, bool autoFlush = true) : IEnumerable<st
 
 		// Write string value
 		await stream.WriteAsync(valueBytes, cancellationToken);
-		if (autoFlush) stream.Flush();
+		if (autoFlush) await FlushAsync(cancellationToken);
 
 		return valueBytes.Length;
 	}
 
 	public void Flush() => stream.Flush();
-	public Task FlushAsync() => stream.FlushAsync();
+	public Task FlushAsync(CancellationToken cancellationToken = default) => stream.FlushAsync(cancellationToken);
 
 	#region IEnumerable/IAsyncEnumerable Implementation
 	IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
