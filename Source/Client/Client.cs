@@ -162,9 +162,6 @@ static class Client
         default:
           throw new InvalidOperationException($"Invalid message type from server: {type}");
       }
-
-
-      Console.WriteLine(response);
     }
 
     if (response != "<<END>>")
