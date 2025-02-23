@@ -2,16 +2,24 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Watch-Publish",
+      "label": "Build Server",
       "icon": {
-        "color": "terminal.ansiCyan",
-        "id": "sync"
+        "color": "terminal.ansiYellow",
+        "id": "wrench"
       },
       "type": "shell",
-      "command": "dotnet watch publish -c Debug",
+      "command": "dotnet build Source/Server",
       "group": "build",
-      "isBackground": true
+    },
+    {
+      "label": "Build Client",
+      "icon": {
+        "color": "terminal.ansiYellow",
+        "id": "wrench"
+      },
+      "type": "shell",
+      "command": "dotnet build Source/Server",
+      "group": "build",
     }
-
   ]
 }

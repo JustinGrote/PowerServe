@@ -10,9 +10,9 @@ public class TracedStreamReader(Stream stream) : StreamReader(stream, leaveOpen:
 		return line;
 	}
 
-	public override async Task<string?> ReadLineAsync() => await ReadLineAsync(CancellationToken.None).AsTask();
+	public override async Task<string?> ReadLineAsync() => await ReadLine(CancellationToken.None).AsTask();
 
-	public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+	public override async ValueTask<string?> ReadLine(CancellationToken cancellationToken)
 	{
 		string? line = await base.ReadLineAsync(cancellationToken);
 		Trace.TraceInformation($"READASYNC: {line}");
@@ -33,13 +33,13 @@ public class TracedStreamWriter : StreamWriter
 		base.WriteLine(value);
 	}
 
-	public override async Task WriteLineAsync(string? value)
+	public override async Task WriteLine(string? value)
 	{
 		Trace.TraceInformation($"WRITEASYNC: {value}");
 		await base.WriteLineAsync(value);
 	}
 
-	public async Task WriteLineAsync(string? value, CancellationToken cancellationToken)
+	public async Task WriteLine(string? value, CancellationToken cancellationToken)
 	{
 		Trace.TraceInformation($"WRITEASYNC: {value}");
 		await base.WriteLineAsync(value.AsMemory(), cancellationToken);

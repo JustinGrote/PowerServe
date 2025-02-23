@@ -1,9 +1,6 @@
-using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
-using System.Text;
-using System.Threading.Channels;
 
 using Microsoft.PowerShell.Commands;
 
@@ -22,7 +19,7 @@ public class PowerShellTarget
     runspacePool.Open();
   }
 
-  public async Task RunScriptJsonAsync(string script, StreamWriter writer, CancellationToken cancellationToken, int depth = 5)
+  public async Task RunScriptJsonAsync(string script, Func<string, Task> writer, CancellationToken cancellationToken, int depth = 5)
   {
     _ = Console.Error.WriteLineAsync($"Running script: {script}");
     using PowerShell ps = PowerShell.Create();
@@ -57,7 +54,7 @@ public class PowerShellTarget
         _ = Console.Error.WriteLineAsync($"Item Output on pipeline");
         string jsonResult = JsonObject.ConvertToJson(item, in context);
         _ = Console.Error.WriteLineAsync($"Item Received: {jsonResult}");
-        await writer.WriteLineAsync(jsonResult);
+        await writer(jsonResult);
       }
     });
 
@@ -153,16 +150,15 @@ public class Server
 
   async Task HandleClientConnectionAsync(NamedPipeServerStream serverStream)
   {
-    using StreamReader reader = new TracedStreamReader(serverStream);
-    using StreamWriter writer = new TracedStreamWriter(serverStream);
-    string inFromClient = await reader.ReadLineAsync() ?? string.Empty;
+    StreamString reader = new(serverStream);
+    StreamString writer = new(serverStream);
+    string inFromClient = await reader.ReadAsync();
 
     _ = Console.Out.WriteLineAsync("IN: " + inFromClient);
-    // We accept from client either a depth and base64 encoded script or just a script. ex. 0 AAAFFESERS
+    // We accept from client either a depth and script or just a script. ex. 0 AAAFFESERS
     var parts = inFromClient.Split(' ', 2);
     int depth = 5; // default depth value
-    string encodedScript = parts.Length == 2 && int.TryParse(parts[1], out depth) ? parts[0] : inFromClient;
-    string script = Encoding.UTF8.GetString(Convert.FromBase64String(encodedScript));
+    string script = parts.Length == 2 && int.TryParse(parts[0], out depth) ? parts[1] : inFromClient;
 
     using CancellationTokenSource runScriptCts = new();
     try
@@ -172,17 +168,30 @@ public class Server
       {
         Console.Error.WriteLine("Waiting for Cancellation.");
         // This should block on the client until a new line is received or the stream is closed.
-        if (reader.ReadLine() == "<<CANCEL>>")
+        try
         {
-          Console.Error.WriteLine("Cancel message received by client. Cancelling script.");
-          runScriptCts.Cancel();
+          if (reader.Read() == "<<CANCEL>>")
+          {
+            Console.Error.WriteLine("Cancel message received by client. Cancelling script.");
+            runScriptCts.Cancel();
+          }
+          else
+          {
+            Console.Error.WriteLine("No cancel message received. Continuing script.");
+          }
         }
-        else
+        catch (EndOfStreamException)
         {
-          Console.Error.WriteLine("No cancel message received. Continuing script.");
+          Console.Error.WriteLine("Stream ended with no cancellation. This is normal.");
         }
       });
-      await Target.RunScriptJsonAsync(script, writer, runScriptCts.Token, depth);
+
+      await Target.RunScriptJsonAsync(
+        script,
+        async outLine => await writer.WriteAsync(outLine),
+        runScriptCts.Token,
+        depth
+      );
     }
     catch (PipelineStoppedException)
     {
@@ -191,19 +200,19 @@ public class Server
         Console.Error.WriteLine($"SERVER ERROR: Script unexpectedly stopped");
       }
       Console.Error.WriteLine($"Script Succssfully Cancelled");
-      await writer.WriteLineAsync("<<CANCELLED>>");
+      await writer.WriteAsync("<<CANCELLED>>");
     }
     catch (Exception ex)
     {
       Console.Error.WriteLine($"Error running script: {ex}");
       if (serverStream.CanWrite)
       {
-        await writer.WriteLineAsync($"SERVER ERROR: {ex}");
+        await writer.WriteAsync($"SERVER ERROR: {ex}");
       }
     }
 
     // Signal the end of the response.
     _ = Console.Out.WriteLineAsync("End of script ");
-    await writer.WriteLineAsync("<<END>>");
+    await writer.WriteAsync("<<END>>");
   }
 }

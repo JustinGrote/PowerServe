@@ -14,7 +14,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.Commands.Utility" Version="7.4.0" />
     <PackageReference Include="System.Management.Automation" Version="7.4.0" PrivateAssets="all" />
-    <Compile Include="../Shared/TracedStream.cs" />
+    <Compile Include="../Shared/StreamString.cs" />
   </ItemGroup>
 
   <Target Name="CopyToBuildFolder" AfterTargets="Publish">

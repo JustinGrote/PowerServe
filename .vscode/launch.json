@@ -11,21 +11,21 @@
       "script": "Import-Module ./Source/Server/bin/Debug/net8.0/PowerServe.dll;Start-PowerServe;sleep 300",
       "createTemporaryIntegratedConsole": true,
       "attachDotnetDebugger": true,
-      "preLaunchTask": "dotnet: build",
+      "preLaunchTask": "Build Server",
     },
     {
-      "name": "Run PowerClient Hello World",
+      "name": "Client: Hello World",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "dotnet: build",
       "program": "${workspaceFolder}/Source/Client/bin/Debug/net9.0/PowerServeClient.dll",
+      "preLaunchTask": "Build Client",
       "args": [
         "-c",
         "'Hello World'"
       ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
-      "console": "internalConsole"
+      "console": "integratedTerminal"
     }
 	]
 }

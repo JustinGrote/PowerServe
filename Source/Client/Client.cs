@@ -1,5 +1,4 @@
 using System.IO.Pipes;
-using System.Text;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -26,13 +25,19 @@ static class Client
 
     try
     {
-      pipeClient.Connect(500);
-      GetNamedPipeServerProcessId(pipeClient.SafePipeHandle.DangerousGetHandle(), out int serverProcessId);
-      Trace.TraceInformation($"Connected to PowerServe (PID: {serverProcessId}) on Pipe {pipeName}.");
+
+      // While we could use some pipe existence checks, they are platform-specific, and this should only incur a small "cold-start" penalty which is why we use Connect instead
+      // FIXME: There is a risk the server is unresponsive and we try to create a second listener here.
+      await pipeClient.ConnectAsync(500, cancellationToken);
     }
-    catch (TimeoutException)
+    catch (OperationCanceledException)
     {
-      Trace.TraceInformation($"PowerServe is not running on pipe {pipeName}. Spawning new pwsh.exe PowerServe listener...");
+      throw new OperationCanceledException("Connection to PowerServe was canceled");
+    }
+
+    if (!pipeClient.IsConnected)
+    {
+      Trace.TraceInformation($"PowerServe is not listening on pipe {pipeName}. Spawning new pwsh.exe PowerServe listener...");
 
       if (string.IsNullOrWhiteSpace(exeDir))
       {
@@ -60,65 +65,73 @@ static class Client
       {
         StartInfo = startInfo
       };
-      process.Start();
-      // Shouldn't take more than 3 seconds to start up
-      pipeClient.Connect(3000);
+
+      try
+      {
+        process.Start();
+        // Shouldn't take more than 3 seconds to start up
+        await pipeClient.ConnectAsync(3000, cancellationToken);
+      }
+      catch (OperationCanceledException)
+      {
+        throw new OperationCanceledException("PowerServe startup was cancelled.");
+      }
+      finally
+      {
+        if (!pipeClient.IsConnected)
+        {
+          // Cleanup the process if running
+          Trace.TraceInformation($"PowerServe did not successfully start listening on {pipeName}. Attempting to kill the process.");
+          // Let these exceptions bubble up
+          process.Kill();
+        }
+      }
     }
 
     if (!pipeClient.IsConnected)
     {
-
-      throw new InvalidOperationException($"Failed to connect to PowerServe on pipe {pipeName}");
+      throw new InvalidOperationException($"Failed to connect to PowerServe on pipe {pipeName}.");
     }
 
     Trace.TraceInformation($"Connected to PowerServe on Pipe {pipeName}.");
 
-    // We use base64 encoding to avoid issues with newlines in the script.
     Trace.TraceInformation($"Script contents: {script}");
 
-    byte[] scriptBytes = Encoding.UTF8.GetBytes(script);
-    string base64Script = Convert.ToBase64String(scriptBytes);
-
-    var streamWriter = new TracedStreamWriter(pipeClient);
-    var streamReader = new TracedStreamReader(pipeClient);
+    StreamString reader = new(pipeClient);
+    StreamString writer = new(pipeClient);
 
     // Register a callback to send <<CANCEL>> when cancellation is requested
     cancellationToken.Register(() =>
-    {
-      Trace.TraceWarning("Cancellation requested. Sending <<CANCEL>> to server.");
-      streamWriter.WriteLine("<<CANCEL>>");
-      streamWriter.Flush();
-    });
+      {
+        Trace.TraceWarning("Cancellation requested. Sending <<CANCEL>> to server.");
+        writer.Write("<<CANCEL>>");
+      });
 
-    if (depth > 0)
-    {
-      Trace.TraceInformation($"Depth specified as {depth}. Appending to script.");
-      base64Script = $"{base64Script} {depth}";
-    }
-    Trace.TraceInformation($"Base64 Encoded Script: {base64Script}");
+    // Send the script to the server
+    string stringWithDepth = $"{depth} {script}";
+    Trace.TraceInformation($"Writing to Server: {stringWithDepth}");
+    int writtenBytes = await writer.WriteAsync(stringWithDepth, cancellationToken);
+    Trace.TraceInformation($"Wrote {writtenBytes} bytes to server.");
 
-    await streamWriter.WriteLineAsync(base64Script);
-    await streamWriter.FlushAsync();
-
-    string? jsonResponse;
-    while ((jsonResponse = await streamReader.ReadLineAsync()) != null)
+    string? response;
+    while ((response = reader.Read()) != null)
     {
-      if (jsonResponse == "<<END>>")
+      if (response == "<<END>>")
       {
         Trace.TraceInformation("Received <<END>>. Terminating normally.");
         break;
       }
 
-      if (jsonResponse == "<<CANCELLED>>")
+      if (response == "<<CANCELLED>>")
       {
         Trace.TraceInformation("Script Cancelled Successfully.");
         continue;
       }
 
-      Console.WriteLine(jsonResponse);
+      Console.WriteLine(response);
     }
 
-    if (jsonResponse != "<<END>>")
+    if (response != "<<END>>")
     {
       throw new InvalidOperationException("Connection closed unexpectedly before receiving <<END>>.");
     }
