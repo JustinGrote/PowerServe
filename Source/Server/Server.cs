@@ -21,7 +21,7 @@ public class PowerShellTarget
     runspacePool.Open();
   }
 
-  public async Task RunScriptJsonAsync(string script, Func<string, Task> writer, CancellationToken cancellationToken, int depth = 5)
+  public async Task RunScriptJsonAsync(string script, Func<string, Task> writeClient, CancellationToken cancellationToken, int depth = 5)
   {
     _ = Console.Error.WriteLineAsync($"Running script: {script}");
     using PowerShell ps = PowerShell.Create();
@@ -42,9 +42,22 @@ public class PowerShellTarget
       _ = Console.Error.WriteLineAsync($"Cancellation requested. Stopping script: {script}");
       return;
     }
-    var invokeTask = ps
-      .AddScript(script)
-      .InvokeAsync<PSObject, PSObject>(null, outputCollection);
+    PSInvocationSettings settings = new()
+    {
+      RemoteStreamOptions = RemoteStreamOptions.AddInvocationInfoToErrorRecord
+    };
+
+    ps.AddScript(script);
+    // Redirect all streams to output (e.g. Error, Warning) so it is captured by the collection
+    ps.Commands.Commands[0].MergeMyResults(PipelineResultTypes.All, PipelineResultTypes.Output);
+
+    Task<PSDataCollection<PSObject>> invokeTask = ps.InvokeAsync<PSObject, PSObject>(
+      input: null,
+      outputCollection,
+      settings,
+      callback: null,
+      state: null
+    );
 
     JsonObject.ConvertToJsonContext context = new(depth, true, true);
 
@@ -53,14 +66,36 @@ public class PowerShellTarget
     {
       foreach (var item in outputCollection)
       {
-        _ = Console.Error.WriteLineAsync($"Item Output on pipeline");
-        string jsonResult = JsonObject.ConvertToJson(item, in context);
-        _ = Console.Error.WriteLineAsync($"Item Received: {jsonResult}");
-        await writer(jsonResult);
+        // Stringify and format the resuilts so the client knows how to handle them
+        string result = item.BaseObject switch
+        {
+          DebugRecord dr => $"D:{dr}",
+          VerboseRecord vr => $"V:{vr}",
+          InformationRecord ir => $"I:{ir}",
+          WarningRecord wr => $"W:{wr}",
+          ErrorRecord er => $"E:{er}",
+          _ => "O:" + JsonObject.ConvertToJson(item, in context)
+        };
+
+        _ = Console.Error.WriteLineAsync($"Item Output: {result}");
+        await writeClient(result);
       }
     });
 
-    _ = await invokeTask;
+    try
+    {
+      _ = await invokeTask;
+    }
+    catch (RuntimeException ex)
+    {
+      _ = Console.Error.WriteLineAsync($"Script Error: {ex}");
+      await writeClient($"SCRIPT ERROR: {ex.InnerException} {ex.InnerException.StackTrace}");
+    }
+    catch (Exception ex)
+    {
+      _ = Console.Error.WriteLineAsync($"Server Error: {ex}");
+      await writeClient($"SERVER ERROR: {ex}");
+    }
     // PowerShell doesn't auto-close the collection, we must do it manually. This will unblock the outputTask after it finishes all the items in the collection.
     outputCollection.Complete();
     await outputTask;
@@ -184,7 +219,7 @@ public class Server
         }
         catch (EndOfStreamException)
         {
-          Console.Error.WriteLine("Stream ended with no cancellation. This is normal.");
+          Console.Error.WriteLine("Stream completed with no cancellation. This is normal.");
         }
       });
 

@@ -130,6 +130,40 @@ static class Client
         continue;
       }
 
+      string[] responseParts = response.Split(':', 2);
+      if (responseParts.Length != 2 && responseParts[0].Length != 1)
+      {
+        throw new InvalidOperationException($"Invalid message format from server: {response}");
+      }
+
+      string type = responseParts[0];
+      string message = responseParts[1];
+
+      switch (type)
+      {
+        case "O":
+          Console.WriteLine(message);
+          continue;
+        case "D":
+          Console.Error.WriteLine($"DEBUG: {message}");
+          continue;
+        case "V":
+          Console.Error.WriteLine($"VERBOSE: {message}");
+          continue;
+        case "I":
+          Console.WriteLine($"INFO: {message}");
+          continue;
+        case "W":
+          Console.Error.WriteLine($"WARNING: {message}");
+          continue;
+        case "E":
+          Console.Error.WriteLine($"ERROR: {message}");
+          continue;
+        default:
+          throw new InvalidOperationException($"Invalid message type from server: {type}");
+      }
+
+
       Console.WriteLine(response);
     }
 

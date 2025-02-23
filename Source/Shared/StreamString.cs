@@ -59,6 +59,8 @@ public class StreamString(Stream stream, bool autoFlush = true) : IEnumerable<st
 		byte[] lengthBytes = new byte[sizeof(int)];
 		await stream.ReadExactlyAsync(lengthBytes, cancellationToken);
 
+		if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
+
 		// Read string bytes
 		byte[] valueBytes = new byte[BitConverter.ToInt32(lengthBytes)];
 		await stream.ReadExactlyAsync(valueBytes, cancellationToken);
