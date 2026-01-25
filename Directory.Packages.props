@@ -3,13 +3,13 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-      <PackageVersion Include="System.Management.Automation" Version="7.4.0" />
-      <PackageVersion Include="Microsoft.PowerShell.Commands.Utility" Version="7.4.0" />
-      <PackageVersion Include="streamjsonrpc" Version="2.24.84" />
-      <PackageVersion Include="System.CommandLine" Version="2.0.2" />
-      <PackageVersion Include="coverlet.collector" Version="6.0.2" />
-      <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-      <PackageVersion Include="xunit" Version="2.9.2" />
-      <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="System.Management.Automation" Version="7.4.0" />
+    <PackageVersion Include="Microsoft.PowerShell.Commands.Utility" Version="7.4.0" />
+    <PackageVersion Include="streamjsonrpc" Version="2.24.84" />
+    <PackageVersion Include="ConsoleAppFramework" Version="5.7.13" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageVersion Include="xunit" Version="2.9.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
 </Project>

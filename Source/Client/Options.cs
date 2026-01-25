@@ -1,58 +1,82 @@
-using System.CommandLine;
-using System.CommandLine.Parsing;
+using System.Diagnostics;
 
 namespace PowerServe.Client;
 
 /// <summary>
-/// Holds the command line options for the PowerServe client in a
+/// PowerServe Client - Execute PowerShell scripts via a persistent PowerShell server.
 /// </summary>
-public static class Options
+public static class Commands
 {
-	public static readonly Option<string> Script = new("--script", "-c")
+	/// <summary>
+	/// Execute a PowerShell script or file
+	/// </summary>
+	/// <param name="script">-c, A PowerShell script string to execute. Example: "'Hello World'"</param>
+	/// <param name="file">-f, Path to a PowerShell script file to execute</param>
+	/// <param name="workingDirectory">-w, The working directory to use when spawning the PowerServe server</param>
+	/// <param name="pipeName">-p, The named pipe to use. The server will start here if not already running</param>
+	/// <param name="verbose">-v, Log verbose messages about what PowerServeClient is doing to stderr</param>
+	/// <param name="depth">-d, The maximum depth for JSON serialization of PowerShell objects</param>
+	/// <param name="exeDir">-e, The directory to use to find pwsh.exe when spawning the PowerServe server if needed</param>
+	public static async Task Root(
+		string? script = null,
+		FileInfo? file = null,
+		DirectoryInfo? workingDirectory = null,
+		string? pipeName = null,
+		bool verbose = false,
+		int depth = 2,
+		DirectoryInfo? exeDir = null,
+		CancellationToken cancellationToken = default)
 	{
-		Description = "A PowerShell script string to execute. Example: \"'Hello World'\""
-	};
+		try
+		{
+			// Validate file exists if provided
+			if (file != null && !file.Exists)
+			{
+				throw new FileNotFoundException($"File not found: {file.FullName}");
+			}
 
-	public static readonly Option<FileInfo> File = new("--file", "-f")
-	{
-		Description = "Path to a PowerShell script file to execute",
-	};
+			// Validate working directory exists if provided
+			if (workingDirectory != null && !workingDirectory.Exists)
+			{
+				throw new DirectoryNotFoundException($"Working directory not found: {workingDirectory.FullName}");
+			}
 
-	public static readonly Option<DirectoryInfo> WorkingDirectory = new("--working-directory", "-w")
-	{
-		Description = "The working directory to use when spawning the PowerServe server",
-		DefaultValueFactory = x => new DirectoryInfo(Environment.CurrentDirectory)
-	};
+			// Validate exeDir exists if provided
+			if (exeDir != null && !exeDir.Exists)
+			{
+				throw new DirectoryNotFoundException($"Exe directory not found: {exeDir.FullName}");
+			}
 
-	public static readonly Option<string> PipeName = new("--pipe-name", "-p")
-	{
-		Description = "The named pipe to use. The server will start here if not already running",
-		DefaultValueFactory = x => $"PowerServe-{Environment.UserName}"
-	};
+			// Set defaults
+			workingDirectory ??= new DirectoryInfo(Environment.CurrentDirectory);
+			pipeName ??= $"PowerServe-{Environment.UserName}";
+			exeDir ??= new DirectoryInfo(Environment.CurrentDirectory);
 
-	public static readonly Option<bool> Verbose = new("--verbose", "-v")
-	{
-		Description = "Log verbose messages about what PowerServeClient is doing to stderr. This may interfere with the JSON response so only use for troubleshooting"
-	};
+			string resolvedScript = file != null ? $"& (Resolve-Path {file.FullName})" : script!;
 
-	public static readonly Option<int> Depth = new("--depth", "-d")
-	{
-		Description = "The maximum depth for JSON serialization of PowerShell objects. Set to a higher value if you need more in-depth information but this may slow processing, it is better to keep your objects shallow if possible.",
-		DefaultValueFactory = x => 2
-	};
-
-	public static readonly Option<DirectoryInfo> ExeDir = new("--exeDir", "-e")
-	{
-		Description = "The directory to use to find pwsh.exe when spawning the PowerServe server if needed. Defaults to the directory of the current executable",
-		DefaultValueFactory = x => new DirectoryInfo(Environment.CurrentDirectory)
-	};
-
-	// Setup validators for the options
-	public static void Initialize()
-	{
-		File.AcceptExistingOnly();
-		WorkingDirectory.AcceptExistingOnly();
-		ExeDir.AcceptExistingOnly();
+			await Client.InvokeScript(
+				script: resolvedScript,
+				pipeName: pipeName,
+				workingDirectory: workingDirectory.FullName,
+				verbose: verbose,
+				cancellationToken,
+				exeDir.FullName,
+				depth
+			);
+		}
+		catch (Exception ex)
+		{
+			if (!string.IsNullOrEmpty(ex.Message))
+			{
+				Console.Error.WriteLine($"ERROR {ex.GetType().Name}: {ex.Message}");
+			}
+			Environment.ExitCode = (int)ExitCodeMapper.GetExitCode(ex);
+			throw;
+		}
+		finally
+		{
+			Trace.Flush();
+		}
 	}
 }
 

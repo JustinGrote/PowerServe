@@ -1,3 +1,6 @@
 {
-  "dotnet.defaultSolution": "PowerServe.sln"
+  "dotnet.defaultSolution": "PowerServe.sln",
+  "chat.tools.terminal.autoApprove": {
+    "dotnet build": true
+  }
 }

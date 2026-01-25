@@ -20,7 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="ConsoleAppFramework" />
     <Compile Include="../Shared/StreamString.cs" />
   </ItemGroup>
 
