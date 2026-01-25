@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.PowerShell.Commands.Utility" />
     <PackageReference Include="System.Management.Automation" PrivateAssets="all" />
     <Compile Include="../Shared/StreamString.cs" />
+    <Compile Include="../Shared/NamedPipeUtils.cs" />
   </ItemGroup>
 
   <Target Name="CopyToBuildFolder" AfterTargets="Publish">

@@ -2,9 +2,12 @@ using System.IO.Pipes;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 
+
 using Microsoft.PowerShell.Commands;
 
 using PowerServe.Shared;
+
+using static PowerServe.Shared.NamedPipeUtils;
 
 namespace PowerServe;
 
@@ -112,77 +115,88 @@ public class Server
   public async Task StartAsync(string pipeName) => await StartAsync(pipeName, CancellationToken);
   public async Task StartAsync(string pipeName, CancellationToken cancellationToken)
   {
-    if (string.IsNullOrWhiteSpace(pipeName))
-    {
-      pipeName = "PowerServe-" + Environment.UserName;
-    }
-    Dictionary<Type, int> retryExceptions = [];
-    NamedPipeServerStream? pipeServer = CreatePipe(pipeName);
-
     try
     {
+      if (string.IsNullOrWhiteSpace(pipeName))
+      {
+        pipeName = "PowerServe-" + Environment.UserName;
+      }
+      Dictionary<Type, int> retryExceptions = [];
+
+      if (NamedPipeExists(pipeName))
+      {
+        throw new InvalidOperationException($"A named pipe with the name '{pipeName}' already exists. Please choose a different pipe name or stop the server hosting it.");
+      }
+
+      NamedPipeServerStream pipeServer = CreatePipe(pipeName);
+
       while (!cancellationToken.IsCancellationRequested)
       {
         try
         {
-          // This should be the first await in the method so that the pipe server is running before we return to our caller.
-          _ = Console.Out.WriteLineAsync($"Listening for client {ClientSessionId} on {pipeName}");
-          await pipeServer.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-          break;
-        }
-        catch (IOException ex)
-        {
-          retryExceptions.TryGetValue(ex.GetType(), out int retryThisExceptionType);
-          retryExceptions[ex.GetType()] = retryThisExceptionType + 1;
-
-          // The client has disconnected prematurely before WaitForConnectionAsync could pick it up.
-          // Ignore that and wait for the next connection unless cancellation is requested.
-          if (cancellationToken.IsCancellationRequested)
+          try
+          {
+            // This should be the first await in the method so that the pipe server is running before we return to our caller.
+            _ = Console.Out.WriteLineAsync($"Listening for client {ClientSessionId} on {pipeName}");
+            await pipeServer.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+          }
+          catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
           {
             break;
           }
+          catch (IOException ex)
+          {
+            retryExceptions.TryGetValue(ex.GetType(), out int retryThisExceptionType);
+            retryExceptions[ex.GetType()] = retryThisExceptionType + 1;
 
-          await pipeServer.DisposeAsync().ConfigureAwait(false);
-          pipeServer = CreatePipe(pipeName);
-          continue;
+            // The client has disconnected prematurely before WaitForConnectionAsync could pick it up.
+            // Ignore that and wait for the next connection unless cancellation is requested.
+            if (cancellationToken.IsCancellationRequested)
+            {
+              break;
+            }
+
+            await pipeServer.DisposeAsync().ConfigureAwait(false);
+            pipeServer = CreatePipe(pipeName);
+            continue;
+          }
+
+          // A client has connected. Open a stream to it (and possibly start listening for the next client)
+          // unless cancellation is requested.
+          if (!cancellationToken.IsCancellationRequested)
+          {
+            _ = Console.Out.WriteLineAsync($"Client {ClientSessionId} connected to {pipeName}");
+            ClientSessionId++;
+            // We invoke the callback in a fire-and-forget fashion as documented. It handles its own exceptions.
+            _ = HandleClientConnectionAsync(pipeServer);
+            // Start listening for the next client.
+            pipeServer = CreatePipe(pipeName);
+          }
         }
-
-        // A client has connected. Open a stream to it (and possibly start listening for the next client)
-        // unless cancellation is requested.
-        if (!cancellationToken.IsCancellationRequested)
+        finally
         {
-          _ = Console.Out.WriteLineAsync($"Client {ClientSessionId} connected to {pipeName}");
-          ClientSessionId++;
-
-
-          // We invoke the callback in a fire-and-forget fashion as documented. It handles its own exceptions.
-          _ = HandleClientConnectionAsync(pipeServer);
-          // Start listening for the next client.
-          pipeServer = CreatePipe(pipeName);
+          if (pipeServer is not null)
+          {
+            await pipeServer.DisposeAsync().ConfigureAwait(false);
+          }
         }
       }
     }
-    finally
+    catch (Exception ex)
     {
-      if (pipeServer is not null)
-      {
-        await pipeServer.DisposeAsync().ConfigureAwait(false);
-      }
+      Console.Error.WriteLine($"PowerServe Fatal Error: {ex}");
     }
+  }
 
-    static NamedPipeServerStream CreatePipe(string pipeName)
-    {
-      return new(
-        pipeName,
-        PipeDirection.InOut,
-        NamedPipeServerStream.MaxAllowedServerInstances,
-        PipeTransmissionMode.Byte,
-        PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly
-      );
-    }
+  static NamedPipeServerStream CreatePipe(string pipeName)
+  {
+    return new(
+      pipeName,
+      PipeDirection.InOut,
+      NamedPipeServerStream.MaxAllowedServerInstances,
+      PipeTransmissionMode.Byte,
+      PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly
+    );
   }
 
   async Task HandleClientConnectionAsync(NamedPipeServerStream serverStream)

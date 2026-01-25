@@ -22,6 +22,7 @@
   <ItemGroup>
     <PackageReference Include="ConsoleAppFramework" />
     <Compile Include="../Shared/StreamString.cs" />
+    <Compile Include="../Shared/NamedPipeUtils.cs" />
   </ItemGroup>
 
   <Target Name="CopyToBuildFolder" AfterTargets="Publish">
